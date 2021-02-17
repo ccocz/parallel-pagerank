@@ -12,6 +12,8 @@
 #include "immutable/pageIdAndRank.hpp"
 #include "immutable/pageRankComputer.hpp"
 
+//todo : mutable
+
 class MultiThreadedPageRankComputer : public PageRankComputer {
 public:
     MultiThreadedPageRankComputer(uint32_t numThreadsArg)
@@ -20,8 +22,24 @@ public:
     std::vector<PageIdAndRank> computeForNetwork(Network const& network, double alpha, uint32_t iterations, double tolerance) const
     {
         std::unordered_map<PageId, PageRank, PageIdHash> pageHashMap;
+
+        std::vector<std::thread> threads;
+
+        for (uint32_t i = 0, start = 0; i < numThreads && start < network.getSize(); i++) {
+            threads.push_back(std::thread{[start, &network, this]{
+                  for (uint32_t i = start;
+                       i < network.getSize() && i <= start + network.getSize() / numThreads;
+                       i++) {
+                      network.getPages()[i].generateId(network.getGenerator());
+                  }
+                }});
+            start += network.getSize() / numThreads + 1;
+        }
+        for (auto &thread : threads) {
+            thread.join();
+        }
+
         for (auto const& page : network.getPages()) {
-            page.generateId(network.getGenerator());
             pageHashMap[page.getId()] = 1.0 / network.getSize();
         }
 
@@ -109,6 +127,12 @@ private:
             }
             dangleSum = dangleSum * alpha;
 
+            for (auto& pageMapElem : pageHashMap) {
+                PageId pageId = pageMapElem.first;
+                double danglingWeight = 1.0 / network.getSize();
+                pageMapElem.second = dangleSum * danglingWeight + (1.0 - alpha) / network.getSize();
+            }
+
             double difference = 0;
 
             std::vector<std::thread> threads;
@@ -144,8 +168,7 @@ private:
             double& difference)
         {
             for (PageId pageId : myDivision) {
-                double danglingWeight = 1.0 / network.getSize();
-                double myPR = dangleSum * danglingWeight + (1.0 - alpha) / network.getSize();
+                double myPR = pageHashMap[pageId];
                 if (edges.count(pageId) > 0) {
                     for (auto link : edges[pageId]) {
                         myPR += alpha * previousPageHashMap[link] / numLinks[link];
