@@ -107,9 +107,11 @@ private:
     void workerThread(const std::vector<PageId>& myDivision,
                       Network const& network,
                       double& difference) const {
+
         std::vector<std::pair<PageId, double>> results;
         double differenceLocal = 0;
         double danglingSumLocal = 0;
+
         for (PageId pageId : myDivision) {
             double danglingWeight = 1.0 / network.getSize();
             double myPR = dangleSum * danglingWeight + (1.0 - currentAlpha) / network.getSize();
@@ -124,21 +126,27 @@ private:
             }
             results.push_back({pageId, myPR});
         }
+
         std::unique_lock<std::mutex> uq(mutex);
+
         readyThreads++;
-        if (readyThreads == numThreads) {
-            barrier.notify_all();
-        } else {
-            while (readyThreads != numThreads) {
-                barrier.wait(uq);
-            }
-        }
         for (auto ans : results) {
             result.push_back(PageIdAndRank(ans.first, ans.second));
-            pageHashMap[ans.first] = ans.second;
         }
         difference += differenceLocal;
         newDangleSum += danglingSumLocal;
+
+        if (readyThreads == numThreads) {
+            uq.unlock();
+            barrier.notify_all();
+        } else {
+            barrier.wait(uq, [this]{return readyThreads >= numThreads;});
+            uq.unlock();
+        }
+
+        for (auto ans : results) {
+            pageHashMap[ans.first] = ans.second;
+        }
 
     }
 
@@ -156,7 +164,7 @@ private:
 
         newDangleSum = 0;
 
-        for (auto page : network.getPages()) { // optimize
+        for (auto page : network.getPages()) {
             if (page.getLinks().size() == 0) {
                 danglingNodes.insert(page.getId());
                 newDangleSum += 1.0 / network.getSize();
