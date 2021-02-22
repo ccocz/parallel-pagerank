@@ -79,7 +79,7 @@ public:
                     newDangleSum += myPR;
                 }
 
-                results.push_back({pageId, myPR});
+                results.push_back({ pageId, myPR });
             }
 
             for (auto iter : results) {

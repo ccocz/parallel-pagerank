@@ -4,10 +4,10 @@
 #include <mutex>
 #include <thread>
 
+#include <condition_variable>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
-#include <condition_variable>
 
 #include "immutable/network.hpp"
 #include "immutable/pageIdAndRank.hpp"
@@ -16,7 +16,7 @@
 class MultiThreadedPageRankComputer : public PageRankComputer {
 public:
     MultiThreadedPageRankComputer(uint32_t numThreadsArg)
-        : numThreads(numThreadsArg){};
+            : numThreads(numThreadsArg) {};
 
     std::vector<PageIdAndRank> computeForNetwork(Network const& network, double alpha, uint32_t iterations, double tolerance) const
     {
@@ -24,17 +24,17 @@ public:
         std::vector<std::thread> threads;
 
         for (uint32_t i = 0, start = 0; i < numThreads && start < network.getSize(); i++) {
-            threads.push_back(std::thread{[start, &network, this]{
-                  for (uint32_t i = start;
-                       i < network.getSize() && i <= start + network.getSize() / numThreads;
-                       i++) {
-                      network.getPages()[i].generateId(network.getGenerator());
-                  }
-                }});
+            threads.push_back(std::thread { [start, &network, this] {
+                for (uint32_t i = start;
+                     i < network.getSize() && i <= start + network.getSize() / numThreads;
+                     i++) {
+                    network.getPages()[i].generateId(network.getGenerator());
+                }
+            } });
             start += network.getSize() / numThreads + 1;
         }
 
-        for (auto &thread : threads) {
+        for (auto& thread : threads) {
             thread.join();
         }
 
@@ -106,7 +106,8 @@ private:
 
     void workerThread(const std::vector<PageId>& myDivision,
                       Network const& network,
-                      double& difference) const {
+                      double& difference) const
+    {
 
         std::vector<std::pair<PageId, double>> results;
         double differenceLocal = 0;
@@ -124,7 +125,7 @@ private:
             if (danglingNodes.count(pageId)) {
                 danglingSumLocal += myPR;
             }
-            results.push_back({pageId, myPR});
+            results.push_back({ pageId, myPR });
         }
 
         std::unique_lock<std::mutex> uq(mutex);
@@ -140,17 +141,17 @@ private:
             uq.unlock();
             barrier.notify_all();
         } else {
-            barrier.wait(uq, [this]{return readyThreads >= numThreads;});
+            barrier.wait(uq, [this] { return readyThreads >= numThreads; });
             uq.unlock();
         }
 
         for (auto ans : results) {
             pageHashMap[ans.first] = ans.second;
         }
-
     }
 
-    void init(Network const& network) const {
+    void init(Network const& network) const
+    {
 
         clear();
 
@@ -178,7 +179,8 @@ private:
         }
     }
 
-    void clear() const {
+    void clear() const
+    {
         pageHashMap.clear();
         numLinks.clear();
         danglingNodes.clear();
