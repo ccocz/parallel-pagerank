@@ -26,10 +26,13 @@ public:
             numLinks[page.getId()] = page.getLinks().size();
         }
 
+        double newDangleSum = 0;
+
         std::unordered_set<PageId, PageIdHash> danglingNodes;
         for (auto page : network.getPages()) {
             if (page.getLinks().size() == 0) {
                 danglingNodes.insert(page.getId());
+                newDangleSum += 1.0 / network.getSize();
             }
         }
 
@@ -40,33 +43,48 @@ public:
             }
         }
 
+        std::vector<PageId> ids;
+
+        for (auto& page : network.getPages()) {
+            ids.push_back(page.getId());
+        }
+
+        std::vector<PageIdAndRank> result;
+
+        double difference;
+        double dangleSum;
+
         for (uint32_t i = 0; i < iterations; ++i) {
-            std::unordered_map<PageId, PageRank, PageIdHash> previousPageHashMap = pageHashMap;
 
-            double dangleSum = 0;
-            for (auto danglingNode : danglingNodes) {
-                dangleSum += previousPageHashMap[danglingNode];
-            }
+            dangleSum = newDangleSum;
             dangleSum = dangleSum * alpha;
+            newDangleSum = 0;
+            result.clear();
 
-            double difference = 0;
-            for (auto& pageMapElem : pageHashMap) {
-                PageId pageId = pageMapElem.first;
+            difference = 0;
+            std::vector<std::pair<PageId, double>> results;
+
+            for (PageId pageId : ids) {
 
                 double danglingWeight = 1.0 / network.getSize();
-                pageMapElem.second = dangleSum * danglingWeight + (1.0 - alpha) / network.getSize();
+                double myPR = dangleSum * danglingWeight + (1.0 - alpha) / network.getSize();
 
                 if (edges.count(pageId) > 0) {
                     for (auto link : edges[pageId]) {
-                        pageMapElem.second += alpha * previousPageHashMap[link] / numLinks[link];
+                        myPR += alpha * pageHashMap[link] / numLinks[link];
                     }
+                    difference += std::abs(pageHashMap[pageId] - myPR);
                 }
-                difference += std::abs(previousPageHashMap[pageId] - pageHashMap[pageId]);
+                if (danglingNodes.count(pageId)) {
+                    newDangleSum += myPR;
+                }
+
+                results.push_back({pageId, myPR});
             }
 
-            std::vector<PageIdAndRank> result;
-            for (auto iter : pageHashMap) {
+            for (auto iter : results) {
                 result.push_back(PageIdAndRank(iter.first, iter.second));
+                pageHashMap[iter.first] = iter.second;
             }
 
             ASSERT(result.size() == network.getSize(), "Invalid result size=" << result.size() << ", for network" << network);
